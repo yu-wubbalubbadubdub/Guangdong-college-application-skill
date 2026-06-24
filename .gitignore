@@ -1,0 +1,17 @@
+# Runtime outputs and local test artifacts
+output/
+profiles/
+test-runs/
+
+# Raw source bundles kept outside the published skill package
+000.先看这个(重要重要重要)/
+00、志愿填报必备资料/
+08、广东-2026志愿填报资料【永久更新】/
+Extra08-如何写出好的Skill.md
+
+# Duplicate root-level copy; the published asset lives under assets/
+/2026年广东省普通高校招生考生志愿表（官方）.pdf
+
+# Python cache
+__pycache__/
+*.pyc
