@@ -135,3 +135,16 @@ python skills/guangdong-gaokao-application/scripts/validate_volunteer_output.py 
 ## 非官方声明
 
 本项目与广东省教育考试院、任何高校招生办、OpenAI 或 Codex 官方没有从属、赞助或背书关系。所有校名、考试院名称等均属各自权利人。
+
+## 交流与支持
+
+如果你在使用过程中遇到任何问题，或想与其他高考生、家长和开发者交流，欢迎扫码加入群聊：
+
+![群聊二维码](assets/群聊二维码.jpg)
+
+### 随缘打赏
+
+如果此项目对你有帮助，欢迎随缘打赏作者：
+
+![个人收款码](assets/个人收款码.jpg)
+
