@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this project in academic, tutorial, or public content, please cite it."
+title: "Guangdong College Application Skill"
+authors:
+  - name: "yu-wubbalubbadubdub"
+date-released: "2026-06-25"
+license: "Apache-2.0"
+repository-code: "https://github.com/yu-wubbalubbadubdub/Guangdong-college-application-skill"
+abstract: "A Codex skill for end-to-end Guangdong gaokao college application assistance, covering candidate profiling, historical admissions data querying, recommendation generation, Excel volunteer draft rendering, and cross-validation."

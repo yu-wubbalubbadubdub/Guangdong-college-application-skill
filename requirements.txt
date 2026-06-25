@@ -1,0 +1,5 @@
+# 本项目脚本仅依赖 Python 标准库（>=3.9），无第三方依赖。
+# 以下为维护者可选的安全扫描 / 开发辅助工具，非运行必需。
+# pip install -r requirements.txt
+safety>=3.0.0
+ruff>=0.4.0
