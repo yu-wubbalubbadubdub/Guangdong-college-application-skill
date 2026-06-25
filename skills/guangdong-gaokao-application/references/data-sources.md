@@ -1,6 +1,6 @@
-# 数据源目录与字段说明
+﻿# 数据源目录与字段说明
 
-本文件说明 `references/data/` 中的数据源。脚本默认读取这些 skill 内部文件，不依赖项目根目录下的原始资料包。
+本文件说明 `<skill_dir>/data/` 中的数据源。脚本默认读取这些 skill 内部文件，不依赖项目根目录下的原始资料包。`<skill_dir>/data/` 是脚本私有数据目录，不是按需加载文档目录。
 
 ## 目录
 
@@ -15,16 +15,17 @@
 
 使用原则：
 
-- 先运行 `python scripts/query_admissions.py --list-sources` 查看 source 名。
-- 查询新表前先运行 `python scripts/query_admissions.py --source <source> --inspect` 查看 sheet 和字段。
+- 先运行 `python <skill_dir>/scripts/query_admissions.py --list-sources` 查看 source 名。
+- 查询新表前先运行 `python <skill_dir>/scripts/query_admissions.py --source <source> --inspect` 查看 sheet 和字段。
 - 不要凭记忆改字段名；字段以脚本 inspect 结果为准。
 - 精确匹配院校时优先使用 `--school-code` 或 `--school-exact`，避免 `--school-contains` 误匹配同名/包含关系院校。
 - 历史数据只用于推荐分析，最终填报必须以 2026 官方招生专业目录、广东省教育考试院更正公告和高校招生章程为准。
+- `spring` source 默认读取 `院校录取信息表`，如需查询隐藏历史投档 sheet，必须显式使用 `--sheet` 指定。
 
 ## 数据目录结构
 
 ```text
-references/data/
+<skill_dir>/data/
 ├── scores/
 │   ├── school-scores-2022-2025.xlsx
 │   └── major-scores-2022-2025.xlsx
@@ -49,25 +50,25 @@ references/data/
 
 | source | skill 内部文件 | 原始资料来源 | 用途 |
 | --- | --- | --- | --- |
-| `school-scores` | `references/data/scores/school-scores-2022-2025.xlsx` | `22-25年全国高校在广东的院校录取分数.xlsx` | 院校专业组层面的最低分、最低位次、批次线差 |
-| `major-scores` | `references/data/scores/major-scores-2022-2025.xlsx` | `22-25年全国高校在广东的专业录取分数.xlsx` | 专业层面的最低分、最低位次、专业备注、选科要求 |
-| `plans` | `references/data/plans/admission-plans-2022-2025.xlsx` | `22-25年全国高校在广东的招生计划.xlsx` | 2022-2025 在粤招生计划、专业组、招生人数、学费 |
-| `charters` | `references/data/charters/charters-2025.xlsx` | `最新25年招生章程链接.xlsx` | 2025 招生章程链接、高校主页 |
-| `art-school-scores` | `references/data/art/art-school-scores.xlsx` | `全国艺术院校在广东的院校录取分数线.xlsx` | 艺术类院校层投档线、最低位次、计算公式 |
-| `art-major-scores` | `references/data/art/art-major-scores.xlsx` | `全国艺术院校在广东的专业录取分数线.xlsx` | 艺术类专业层最低分、控线、计算公式 |
-| `art-plans` | `references/data/art/art-plans.xlsx` | `全国艺术院校在广东的招生计划.xlsx` | 艺术类招生计划、专业方向、计划人数 |
-| `spring` | `references/data/spring/spring-2026.xlsx` | `广东-2026春考学考3+证书.xlsx` | 春考学考与 3+证书投档、模板、指南 |
+| `school-scores` | `<skill_dir>/data/scores/school-scores-2022-2025.xlsx` | `22-25年全国高校在广东的院校录取分数.xlsx` | 院校专业组层面的最低分、最低位次、批次线差 |
+| `major-scores` | `<skill_dir>/data/scores/major-scores-2022-2025.xlsx` | `22-25年全国高校在广东的专业录取分数.xlsx` | 专业层面的最低分、最低位次、专业备注、选科要求 |
+| `plans` | `<skill_dir>/data/plans/admission-plans-2022-2025.xlsx` | `22-25年全国高校在广东的招生计划.xlsx` | 2022-2025 在粤招生计划、专业组、招生人数、学费 |
+| `charters` | `<skill_dir>/data/charters/charters-2025.xlsx` | `最新25年招生章程链接.xlsx` | 2025 招生章程链接、高校主页 |
+| `art-school-scores` | `<skill_dir>/data/art/art-school-scores.xlsx` | `全国艺术院校在广东的院校录取分数线.xlsx` | 艺术类院校层投档线、最低位次、计算公式 |
+| `art-major-scores` | `<skill_dir>/data/art/art-major-scores.xlsx` | `全国艺术院校在广东的专业录取分数线.xlsx` | 艺术类专业层最低分、控线、计算公式 |
+| `art-plans` | `<skill_dir>/data/art/art-plans.xlsx` | `全国艺术院校在广东的招生计划.xlsx` | 艺术类招生计划、专业方向、计划人数 |
+| `spring` | `<skill_dir>/data/spring/spring-2026.xlsx` | `广东-2026春考学考3+证书.xlsx` | 春考学考与 3+证书投档、模板、指南 |
 
 ## 一分一段数据
 
-`scripts/equivalent_score.py` 读取：
+`<skill_dir>/scripts/equivalent_score.py` 读取：
 
 | 年份 | 文件 |
 | --- | --- |
-| 2022 | `references/data/segments/guangdong-segments-2022.xlsx` |
-| 2023 | `references/data/segments/guangdong-segments-2023.xlsx` |
-| 2024 | `references/data/segments/guangdong-segments-2024.xlsx` |
-| 2025 | `references/data/segments/guangdong-segments-2025.xlsx` |
+| 2022 | `<skill_dir>/data/segments/guangdong-segments-2022.xlsx` |
+| 2023 | `<skill_dir>/data/segments/guangdong-segments-2023.xlsx` |
+| 2024 | `<skill_dir>/data/segments/guangdong-segments-2024.xlsx` |
+| 2025 | `<skill_dir>/data/segments/guangdong-segments-2025.xlsx` |
 
 字段：
 
@@ -84,8 +85,8 @@ references/data/
 示例：
 
 ```bash
-python scripts/equivalent_score.py --year 2025 --subject 物理类 --rank 50000
-python scripts/equivalent_score.py --year 2025 --subject 历史类 --score 560
+python <skill_dir>/scripts/equivalent_score.py --year 2025 --subject 物理类 --rank 50000
+python <skill_dir>/scripts/equivalent_score.py --year 2025 --subject 历史类 --score 560
 ```
 
 ## 主表字段
@@ -109,25 +110,26 @@ python scripts/equivalent_score.py --year 2025 --subject 历史类 --score 560
 说明：`charters` 原表首行是标题，脚本会自动识别真正表头。查询示例：
 
 ```bash
-python scripts/query_admissions.py --source charters --school-exact 清华大学
+python <skill_dir>/scripts/query_admissions.py --source charters --school-exact 清华大学
 ```
 
 艺术类和春考数据字段差异较大，使用前必须先 `--inspect`。
+脚本已为 `spring` 和 `art-*` source 配置专用默认输出列，但艺术类数据可能不覆盖所有年份；若按年份查询为空，必须先核对可用年份，并以 2026 体育艺术版招生专业目录和高校章程复核。
 
 ## 查询参数补充
 
 推荐使用：
 
 ```bash
-python scripts/query_admissions.py --source plans --year 2025 --subject 物理类 --school-code 10614
-python scripts/query_admissions.py --source plans --year 2025 --subject 物理类 --school-exact 电子科技大学
-python scripts/query_admissions.py --source major-scores --year 2025 --subject 物理类 --major-exact 计算机类
+python <skill_dir>/scripts/query_admissions.py --source plans --year 2025 --subject 物理类 --school-code 10614
+python <skill_dir>/scripts/query_admissions.py --source plans --year 2025 --subject 物理类 --school-exact 电子科技大学
+python <skill_dir>/scripts/query_admissions.py --source major-scores --year 2025 --subject 物理类 --major-exact 计算机类
 ```
 
 Windows PowerShell 中，如果 `--columns` 包含括号字段，必须给整个列名参数加引号：
 
 ```powershell
-python -X utf8 scripts\query_admissions.py --source plans --year 2025 --subject 物理类 --school-code 10614 --columns "年份,院校名称,院校代码,科类,批次,专业名称,专业代码,所属专业组,招生人数,学制(年),学费(元)"
+python -X utf8 <skill_dir>\scripts\query_admissions.py --source plans --year 2025 --subject 物理类 --school-code 10614 --columns "年份,院校名称,院校代码,科类,批次,专业名称,专业代码,所属专业组,招生人数,学制(年),学费(元)"
 ```
 
 ## 查询策略
@@ -142,7 +144,7 @@ python -X utf8 scripts\query_admissions.py --source plans --year 2025 --subject 
 ## 数据使用优先级
 
 1. 2026 广东省教育考试院官方通知、招生专业目录、增补更正公告和高校招生章程。
-2. `references/data/` 中 2025 年录取、计划和一分一段数据。
+2. `<skill_dir>/data/` 中 2025 年录取、计划和一分一段数据。
 3. 2024、2023、2022 年数据，用于趋势、冷热变化和等位分稳定性校验。
 4. 原始资料包中的旧版历史数据只能作为补充趋势，不直接替代本 skill 整理后的主数据源。
 

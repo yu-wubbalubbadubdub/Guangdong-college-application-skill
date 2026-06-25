@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Create or update a structured Guangdong application profile card."""
 
 from __future__ import annotations
@@ -68,6 +68,19 @@ SECTION_ALIASES = {
     ("推荐使用准则", "任何层级都不得推荐"): ["explicit_rejections", "never_recommend", "任何层级都不得推荐"],
 }
 
+STRICT_REQUIRED_FIELDS = [
+    ("基本信息", "考生"),
+    ("基本信息", "年份"),
+    ("基本信息", "科类"),
+    ("基本信息", "分数"),
+    ("基本信息", "位次"),
+    ("基本信息", "目标批次"),
+    ("基本信息", "选科/专业统考类别"),
+    ("风险偏好", "是否服从调剂"),
+    ("待核对事项", "体检限制"),
+    ("待核对事项", "单科/语种限制"),
+]
+
 
 def known_input_keys() -> set[str]:
     keys = set(ALIASES)
@@ -127,17 +140,27 @@ def render(data: dict) -> str:
     return "\n".join(lines)
 
 
+def strict_missing(data: dict) -> list[str]:
+    missing = []
+    for section, item in STRICT_REQUIRED_FIELDS:
+        if not section_value(data, section, item):
+            missing.append(f"{section}/{item}")
+    return missing
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, help="JSON file with profile data")
-    parser.add_argument("--output", help="Output markdown path")
+    parser.add_argument("--output", required=True, help="Output markdown path under the task output directory")
+    parser.add_argument("--strict", action="store_true", help="Fail when core recommendation fields are missing")
     args = parser.parse_args()
 
     data = json.loads(Path(args.input).read_text(encoding="utf-8-sig"))
-    name = lookup(data, "考生") or "anonymous"
-    subject = lookup(data, "科类") or "unknown"
-    score = lookup(data, "分数") or lookup(data, "位次") or "profile"
-    output = Path(args.output) if args.output else ROOT / "profiles" / f"{slug(name)}-{slug(subject)}-{slug(score)}.md"
+    if args.strict:
+        missing = strict_missing(data)
+        if missing:
+            raise SystemExit("资料卡严格校验未通过，缺少核心字段：\n" + "\n".join(f"- {item}" for item in missing))
+    output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(render(data), encoding="utf-8")
     print(output)

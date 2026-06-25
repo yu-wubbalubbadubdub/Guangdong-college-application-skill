@@ -1,11 +1,13 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Query Guangdong admission Excel workbooks without third-party packages."""
 
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import pickle
 import re
 import sys
 import zipfile
@@ -16,16 +18,41 @@ from xml.etree import ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
+CACHE_VERSION = 1
 
 SOURCES = {
-    "school-scores": "references/data/scores/school-scores-2022-2025.xlsx",
-    "major-scores": "references/data/scores/major-scores-2022-2025.xlsx",
-    "plans": "references/data/plans/admission-plans-2022-2025.xlsx",
-    "charters": "references/data/charters/charters-2025.xlsx",
-    "art-school-scores": "references/data/art/art-school-scores.xlsx",
-    "art-major-scores": "references/data/art/art-major-scores.xlsx",
-    "art-plans": "references/data/art/art-plans.xlsx",
-    "spring": "references/data/spring/spring-2026.xlsx",
+    "school-scores": "data/scores/school-scores-2022-2025.xlsx",
+    "major-scores": "data/scores/major-scores-2022-2025.xlsx",
+    "plans": "data/plans/admission-plans-2022-2025.xlsx",
+    "charters": "data/charters/charters-2025.xlsx",
+    "art-school-scores": "data/art/art-school-scores.xlsx",
+    "art-major-scores": "data/art/art-major-scores.xlsx",
+    "art-plans": "data/art/art-plans.xlsx",
+    "spring": "data/spring/spring-2026.xlsx",
+}
+
+SOURCE_DEFAULT_SHEETS = {
+    "spring": "院校录取信息表",
+}
+
+SOURCE_DEFAULT_COLUMNS = {
+    "spring": [
+        "类型", "院校代码", "院校名称", "专业组代码", "2025计划数", "2024计划数",
+        "2025最低分", "2024最低分", "2025最低位次", "2024最低位次",
+        "城市", "办学性质", "招生章程",
+    ],
+    "art-school-scores": [
+        "年份", "学校", "科类", "批次", "专业类别", "专业组", "选科要求",
+        "投档线", "最低位次", "计算公式", "备注",
+    ],
+    "art-major-scores": [
+        "年份", "学校", "科类", "批次", "专业名称", "考试类别",
+        "专业控线(分)", "文化控线(分)", "最低分", "最低位次", "计算公式", "备注",
+    ],
+    "art-plans": [
+        "年份", "学校", "科类", "批次", "专业类别", "专业组", "专业名称",
+        "招生计划(人)", "学制", "学费(元/年)", "选科要求", "备注",
+    ],
 }
 
 NS = {
@@ -46,9 +73,9 @@ ALIASES = {
     "major_code": ["专业代码"],
     "major_note": ["专业备注", "备注"],
     "requirements": ["选科要求", "选考科目", "再选科目要求"],
-    "plan_count": ["招生人数", "招生计划(人)", "计划数"],
-    "score": ["最低分数", "最低分", "投档线", "投档最低分", "2025最低分", "2024最低分"],
-    "rank": ["最低分位", "最低位次", "最低分排名", "投档最低排位", "2025最低位次", "2024最低位次"],
+    "plan_count": ["招生人数", "招生计划(人)", "计划数", "2025计划数", "2024计划数"],
+    "score": ["最低分数", "最低分", "投档线", "投档最低分", "2025最低分", "2024最低分", "平均最低分"],
+    "rank": ["最低分位", "最低位次", "最低分排名", "投档最低排位", "2025最低位次", "2024最低位次", "平均最低位次"],
     "line_diff": ["批次线差"],
     "province": ["学校所在", "省份", "所在省", "院校省份"],
     "city": ["城市", "院校城市"],
@@ -56,7 +83,7 @@ ALIASES = {
     "is_985": ["是否985", "985", "_985"],
     "is_211": ["是否211", "211", "_211"],
     "tuition": ["学费(元)", "学费", "收费标准", "学费(元/年)"],
-    "charter": ["2025招生章程"],
+    "charter": ["2025招生章程", "招生章程"],
     "homepage": ["院校主页链接"],
 }
 
@@ -117,6 +144,14 @@ def cell_value(cell: ET.Element, shared: list[str]) -> str:
     return text
 
 
+def normalize_header_cell(value: str) -> str:
+    return re.sub(r"\s+", "", value or "")
+
+
+def normalize_header_row(row: list[str]) -> list[str]:
+    return [normalize_header_cell(cell) for cell in row]
+
+
 def iter_rows(path: Path, sheet_name: str | None = None):
     with zipfile.ZipFile(path) as zf:
         shared = shared_strings(zf)
@@ -152,6 +187,10 @@ def source_path(name: str) -> Path:
     return path
 
 
+def effective_sheet(source: str, sheet_name: str | None) -> str | None:
+    return sheet_name or SOURCE_DEFAULT_SHEETS.get(source)
+
+
 def parse_number(value: str) -> float | None:
     if value is None:
         return None
@@ -173,6 +212,7 @@ def header_index(header: list[str]) -> dict[str, int]:
 
 
 def header_score(row: list[str]) -> int:
+    row = normalize_header_row(row)
     names = {name for aliases in ALIASES.values() for name in aliases}
     return sum(1 for cell in row if cell in names)
 
@@ -191,7 +231,76 @@ def table_rows(path: Path, sheet_name: str | None = None) -> tuple[str, list[str
     if best_score <= 0:
         best = 0
     sheet, header = rows[best]
-    return sheet, header, [row for _, row in rows[best + 1 :]]
+    return sheet, normalize_header_row(header), [row for _, row in rows[best + 1 :]]
+
+
+
+
+def default_cache_dir() -> Path:
+    """Project-local cache for parsed workbook rows.
+
+    The admission workbooks are .xlsx zip archives. Parsing their XML on every
+    query is the expensive part, so cache the normalized table rows outside the
+    skill directory and invalidate by workbook path, sheet, size and mtime.
+    """
+
+    return Path.cwd() / ".cache" / "guangdong-gaokao"
+
+
+def cache_path_for(path: Path, sheet_name: str | None, cache_dir: Path) -> Path:
+    key = f"{path.resolve()}|{sheet_name or ''}"
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:12]
+    return cache_dir / f"{path.stem}-{digest}.pickle"
+
+
+def cache_key(path: Path, sheet_name: str | None) -> dict[str, object]:
+    stat = path.stat()
+    return {
+        "version": CACHE_VERSION,
+        "path": str(path.resolve()),
+        "sheet_name": sheet_name,
+        "mtime_ns": stat.st_mtime_ns,
+        "size": stat.st_size,
+    }
+
+
+def table_rows_cached(
+    path: Path,
+    sheet_name: str | None = None,
+    cache_dir: Path | None = None,
+    use_cache: bool = True,
+    rebuild_cache: bool = False,
+) -> tuple[str, list[str], list[list[str]]]:
+    if not use_cache:
+        return table_rows(path, sheet_name)
+
+    cache_dir = cache_dir or default_cache_dir()
+    key = cache_key(path, sheet_name)
+    cache_file = cache_path_for(path, sheet_name, cache_dir)
+    if not rebuild_cache and cache_file.exists():
+        try:
+            with cache_file.open("rb") as fh:
+                cached = pickle.load(fh)
+            if cached.get("key") == key:
+                return cached["sheet"], cached["header"], cached["rows"]
+        except Exception:
+            cache_file.unlink(missing_ok=True)
+
+    sheet, header, rows = table_rows(path, sheet_name)
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        temp_file = cache_file.with_suffix(".tmp")
+        with temp_file.open("wb") as fh:
+            pickle.dump(
+                {"key": key, "sheet": sheet, "header": header, "rows": rows},
+                fh,
+                protocol=pickle.HIGHEST_PROTOCOL,
+            )
+        temp_file.replace(cache_file)
+    except OSError:
+        # Cache is an optimization only. Keep queries functional in read-only projects.
+        pass
+    return sheet, header, rows
 
 
 def get(row: list[str], index: dict[str, int], key: str) -> str:
@@ -274,8 +383,25 @@ def passes(row: list[str], idx: dict[str, int], args: argparse.Namespace) -> boo
 def inspect_source(args: argparse.Namespace) -> None:
     path = source_path(args.source)
     with zipfile.ZipFile(path) as zf:
-        print(json.dumps({"source": args.source, "file": str(path), "sheets": sheet_paths(zf)}, ensure_ascii=False, indent=2))
-    sheet, header, _ = table_rows(path, args.sheet)
+        print(
+            json.dumps(
+                {
+                    "source": args.source,
+                    "file": str(path),
+                    "default_sheet": SOURCE_DEFAULT_SHEETS.get(args.source),
+                    "sheets": sheet_paths(zf),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    sheet, header, _ = table_rows_cached(
+        path,
+        effective_sheet(args.source, args.sheet),
+        cache_dir=Path(args.cache_dir) if args.cache_dir else None,
+        use_cache=not args.no_cache,
+        rebuild_cache=args.rebuild_cache,
+    )
     print(json.dumps({"sheet": sheet, "columns": header}, ensure_ascii=False, indent=2))
 
 
@@ -287,11 +413,11 @@ def select_columns(header: list[str], rows: list[dict[str, str]], args: argparse
     if args.columns:
         columns = [c.strip() for c in args.columns.split(",") if c.strip()]
     else:
-        preferred = [
+        preferred = SOURCE_DEFAULT_COLUMNS.get(args.source, [
             "年份", "院校名称", "学校", "院校代码", "科类", "批次", "招生类型", "专业组", "所属专业组",
             "专业", "专业名称", "专业代码", "选科要求", "招生人数", "最低分数", "最低位次", "最低分位",
             "批次线差", "学校所在", "学校性质", "是否985", "是否211", "学费(元)", "2025招生章程", "院校主页链接",
-        ]
+        ])
         columns = [c for c in preferred if c in header]
     return [{c: row.get(c, "") for c in columns} for row in rows]
 
@@ -338,6 +464,12 @@ def warn_query_risks(matches: list[dict[str, str]], args: argparse.Namespace) ->
             "请改查 --source plans 补查专业组、专业代码、计划数、学费和备注，并在推荐清单中标记“专业分缺失”。",
             file=sys.stderr,
         )
+    if args.source and args.source.startswith("art-") and not matches and args.year:
+        print(
+            f"WARNING: {args.source} 未匹配到年份 {args.year} 的记录。"
+            "请先运行 --inspect 核对字段和可用年份；艺术类最终推荐必须以 2026 最新体育艺术版招生专业目录、合成分规则和高校章程复核。",
+            file=sys.stderr,
+        )
     if args.source == "charters" and matches and args.school_contains and not (args.school_exact or args.school_code):
         print(
             "WARNING: 招生章程链接应用于具体院校核验；请用 --school-exact 或 --school-code 缩小到单校。",
@@ -347,7 +479,13 @@ def warn_query_risks(matches: list[dict[str, str]], args: argparse.Namespace) ->
 
 def query(args: argparse.Namespace) -> None:
     path = source_path(args.source)
-    _, header, data_rows = table_rows(path, args.sheet)
+    _, header, data_rows = table_rows_cached(
+        path,
+        effective_sheet(args.source, args.sheet),
+        cache_dir=Path(args.cache_dir) if args.cache_dir else None,
+        use_cache=not args.no_cache,
+        rebuild_cache=args.rebuild_cache,
+    )
     idx = header_index(header)
     matches = []
     for row in data_rows:
@@ -390,6 +528,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--columns", help="Comma separated output columns")
     parser.add_argument("--limit", type=int, default=30)
     parser.add_argument("--format", choices=["markdown", "json", "csv"], default="markdown")
+    parser.add_argument("--cache-dir", help="Parsed workbook cache directory; defaults to .cache/guangdong-gaokao under the current project")
+    parser.add_argument("--no-cache", action="store_true", help="Disable parsed workbook cache for this query")
+    parser.add_argument("--rebuild-cache", action="store_true", help="Rebuild the parsed workbook cache before querying")
     return parser
 
 

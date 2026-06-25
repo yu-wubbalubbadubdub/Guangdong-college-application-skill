@@ -1,0 +1,4 @@
+# Optional security tooling for maintainers. Runtime scripts use only the
+# Python standard library and do not require third-party packages.
+bandit>=1.7.10
+pip-audit>=2.7.3

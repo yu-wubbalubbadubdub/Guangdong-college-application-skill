@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Render confirmed recommendations into an official-form-style volunteer draft.
 
 Normal .xlsx output is created by copying the blank template in assets/ and
@@ -53,7 +53,79 @@ REMINDERS = [
 
 SHEET1_WIDTHS = [16, 8, 12, 22, 16, 11, 11, 11, 11, 11, 11, 12, 10, 58]
 SHEET2_WIDTHS = [18, 120]
-REQUIRED_FORM_FIELDS = ["录取批次", "志愿号", "院校代码", "院校名称", "院校专业组代码"]
+REQUIRED_FORM_FIELDS = ["录取批次", "志愿号", "院校代码", "院校名称", "院校专业组代码", "是否服从调剂"]
+OFFICIAL_BATCHES = [
+    {
+        "label": "空军、海军招飞院校",
+        "count": 1,
+        "aliases": ["空军", "海军招飞"],
+    },
+    {
+        "label": "军检院校（含军队、武警、公安、司法、消防、民航招飞等）",
+        "count": 10,
+        "aliases": ["军检院校", "军队", "武警", "公安", "司法", "消防", "民航招飞"],
+    },
+    {
+        "label": "艺术类统考+校考",
+        "count": 1,
+        "aliases": ["统考+校考", "艺术类统考+校考"],
+    },
+    {
+        "label": "本科层次戏曲类省际联考",
+        "count": 1,
+        "aliases": ["本科层次戏曲", "戏曲类省际联考"],
+    },
+    {
+        "label": "提前批本科非军检院校",
+        "count": 20,
+        "aliases": ["非军检院校", "提前批本科非军检", "国家公费师范生"],
+    },
+    {
+        "label": "教师专项计划",
+        "count": 10,
+        "aliases": ["教师专项"],
+    },
+    {
+        "label": "本科层次卫生专项计划",
+        "count": 10,
+        "aliases": ["本科层次卫生专项", "卫生专项计划"],
+    },
+    {
+        "label": "特殊类型招生院校（高水平运动队/综合评价二选一）",
+        "count": 1,
+        "aliases": ["特殊类型招生院校", "高水平运动队", "综合评价"],
+    },
+    {
+        "label": "专科提前定向培养军士",
+        "count": 10,
+        "aliases": ["定向培养军士", "专科提前院校"],
+    },
+    {
+        "label": "专科层次卫生专项计划",
+        "count": 10,
+        "aliases": ["专科层次卫生专项"],
+    },
+    {
+        "label": "艺体类本科院校专业（专业省统考）",
+        "count": 20,
+        "aliases": ["艺体类本科", "体育类本科", "艺术类本科专业省统考"],
+    },
+    {
+        "label": "普通类本科院校（含高校专项计划、地方专项计划、少数民族班、各类预科班院校）",
+        "count": 45,
+        "aliases": ["普通类本科院校", "普通类本科", "本科普通类"],
+    },
+    {
+        "label": "艺体类专科院校专业（专业省统考、戏曲类省际联考）",
+        "count": 20,
+        "aliases": ["艺体类专科", "体育类专科", "艺术类专科"],
+    },
+    {
+        "label": "普通类专科院校",
+        "count": 45,
+        "aliases": ["普通类专科院校", "普通类专科", "专科普通类"],
+    },
+]
 
 
 def load_rows(path: Path) -> list[dict[str, str]]:
@@ -113,6 +185,101 @@ def normalize(row: dict[str, str], index: int) -> dict[str, str]:
     return out
 
 
+def batch_spec(batch: str) -> dict[str, object] | None:
+    text = (batch or "").strip()
+    if not text:
+        return None
+    specs = []
+    for spec in OFFICIAL_BATCHES:
+        label = str(spec["label"])
+        aliases = [label, *list(spec["aliases"])]
+        specs.append((spec, label, aliases))
+        if any(alias and text == alias for alias in aliases):
+            return spec
+    for spec, label, aliases in specs:
+        if text in label:
+            return spec
+        if any(alias and text in alias for alias in aliases):
+            return spec
+    return None
+
+
+def canonical_batch(batch: str) -> str:
+    spec = batch_spec(batch)
+    return str(spec["label"]) if spec else batch
+
+
+def official_batch_count(batch: str) -> int:
+    spec = batch_spec(batch)
+    return int(spec["count"]) if spec else 0
+
+
+def official_blank_rows() -> list[dict[str, str]]:
+    rows = []
+    for spec in OFFICIAL_BATCHES:
+        for index in range(1, int(spec["count"]) + 1):
+            row = {field: "" for field in FIELDS}
+            row["录取批次"] = str(spec["label"])
+            row["志愿号"] = str(index)
+            row["是否服从调剂"] = "待确认"
+            rows.append(row)
+    return rows
+
+
+def filled_official_fields(row: dict[str, str]) -> bool:
+    return bool(
+        row.get("院校代码")
+        and row.get("院校名称")
+        and row.get("院校专业组代码")
+        and any(row.get(f"专业代码{i}") for i in range(1, 7))
+        and row.get("是否服从调剂")
+        and row.get("是否服从调剂") != "待确认"
+    )
+
+
+def target_batches(rows: list[dict[str, str]]) -> list[str]:
+    out = []
+    for row in rows:
+        if has_recommendation(row):
+            batch = canonical_batch(row.get("录取批次", ""))
+            if batch and batch not in out:
+                out.append(batch)
+    return out
+
+
+def official_form_rows(input_rows: list[dict[str, str]]) -> list[dict[str, str]]:
+    rows = official_blank_rows()
+    slots: dict[str, list[int]] = {}
+    for index, row in enumerate(rows):
+        slots.setdefault(row["录取批次"], []).append(index)
+    next_slot = {batch: 0 for batch in slots}
+    extras = []
+    for input_row in input_rows:
+        batch = canonical_batch(input_row.get("录取批次", ""))
+        if batch not in slots:
+            extras.append(input_row)
+            continue
+        try:
+            volunteer_no = int(str(input_row.get("志愿号") or "").strip())
+        except ValueError:
+            volunteer_no = 0
+        if 1 <= volunteer_no <= len(slots[batch]):
+            target_index = slots[batch][volunteer_no - 1]
+        else:
+            pos = next_slot[batch]
+            if pos >= len(slots[batch]):
+                extras.append(input_row)
+                continue
+            target_index = slots[batch][pos]
+            next_slot[batch] = pos + 1
+        merged = dict(rows[target_index])
+        merged.update(input_row)
+        merged["录取批次"] = batch
+        merged["志愿号"] = rows[target_index]["志愿号"]
+        rows[target_index] = merged
+    return rows + extras
+
+
 def render_markdown(rows: list[dict[str, str]]) -> str:
     lines = [
         "# 2026广东省普通高校招生考生志愿表草稿",
@@ -160,6 +327,13 @@ def pad_rows(rows: list[dict[str, str]], count: int) -> list[dict[str, str]]:
     return out
 
 
+def final_rows(rows: list[dict[str, str]], requested_count: int, output: Path) -> list[dict[str, str]]:
+    if output.suffix.lower() == ".xlsx":
+        return official_form_rows(rows)
+    count = requested_count
+    return pad_rows(rows, count)
+
+
 def has_recommendation(row: dict[str, str]) -> bool:
     return bool(row.get("院校名称") or row.get("院校代码") or row.get("院校专业组代码"))
 
@@ -173,10 +347,47 @@ def validation_warnings(rows: list[dict[str, str]]) -> list[str]:
         missing = [field for field in REQUIRED_FORM_FIELDS if not row.get(field)]
         if missing:
             warnings.append(f"{label} 缺少官方填报必需字段：{'、'.join(missing)}。正式填报前必须补齐。")
+        if row.get("是否服从调剂") == "待确认":
+            warnings.append(f"{label} 是否服从调剂仍为“待确认”；正式填报前必须由用户确认。")
         major_codes = [row.get(f"专业代码{i}") for i in range(1, 7)]
         if not any(major_codes):
             warnings.append(f"{label} 未填写任何专业代码；不得凭历史备注猜代码，必须以 2026 招生专业目录补齐。")
     return warnings[:30]
+
+
+def filled_count_by_batch(rows: list[dict[str, str]], batch: str) -> int:
+    canonical = canonical_batch(batch)
+    return sum(1 for row in rows if canonical_batch(row.get("录取批次", "")) == canonical and filled_official_fields(row))
+
+
+def batch_fill_warnings(rows: list[dict[str, str]], required_batches: list[str]) -> list[str]:
+    warnings = []
+    for batch in required_batches:
+        expected = official_batch_count(batch)
+        if not expected:
+            continue
+        filled = filled_count_by_batch(rows, batch)
+        if filled < expected:
+            warnings.append(
+                f"{canonical_batch(batch)} 当前完整填写 {filled}/{expected} 个志愿；"
+                "多数普通考生应在可接受范围内尽量接近或填满官方容量。"
+                "如未满额，最终交叉验证需说明强偏好、高分强匹配、硬约束或数据不足等例外依据；"
+                "否则应回退补充可接受志愿以增加录取机会。"
+            )
+    return warnings
+
+
+def strict_final_errors(rows: list[dict[str, str]], required_batches: list[str], require_full: bool = False) -> list[str]:
+    errors = validation_warnings(rows)
+    if require_full:
+        for batch in required_batches:
+            expected = official_batch_count(batch)
+            if not expected:
+                continue
+            filled = filled_count_by_batch(rows, batch)
+            if filled < expected:
+                errors.append(f"{canonical_batch(batch)} 未达到显式满额要求：已完整填写 {filled}/{expected} 个志愿。")
+    return errors
 
 
 def col_name(index: int) -> str:
@@ -196,6 +407,9 @@ def cell_xml(row: int, col: int, value: str, style: int = 0) -> str:
 
 
 def sheet_xml(rows: list[list[str]], widths: list[float] | None = None) -> str:
+    max_cols = max((len(row) for row in rows), default=1)
+    max_rows = max(len(rows), 1)
+    dimension = f"A1:{col_name(max_cols)}{max_rows}"
     cols = ""
     if widths:
         cols = "<cols>" + "".join(
@@ -212,7 +426,9 @@ def sheet_xml(rows: list[list[str]], widths: list[float] | None = None) -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        f'<dimension ref="{dimension}"/>'
         '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+        '<sheetFormatPr defaultRowHeight="18"/>'
         f"{cols}<sheetData>{''.join(body)}</sheetData></worksheet>"
     )
 
@@ -222,6 +438,7 @@ def workbook_parts(rows: list[dict[str, str]]) -> dict[str, str]:
     reminders = [["项目", "内容"], ["官方附件", OFFICIAL_PDF], ["可编辑空白模板", f"assets/{DEFAULT_TEMPLATE.name}"]]
     reminders.extend([["最终确认提醒", item] for item in REMINDERS])
     reminders.extend([["草稿复核警告", item] for item in validation_warnings(rows)])
+    reminders.extend([["志愿覆盖提示", item] for item in batch_fill_warnings(rows, target_batches(rows))])
     reminders.extend(
         [
             ["使用说明", "请直接编辑“志愿表草稿”工作表中的空白志愿位。"],
@@ -286,8 +503,9 @@ def new_xlsx_package(rows: list[dict[str, str]]) -> dict[str, str]:
 
 def write_blank_template(output: Path, count: int) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
+    rows = blank_rows(count) if count > 0 else official_blank_rows()
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for name, content in new_xlsx_package(blank_rows(count)).items():
+        for name, content in new_xlsx_package(rows).items():
             zf.writestr(name, content)
 
 
@@ -321,11 +539,12 @@ def main() -> None:
     parser.add_argument("--pad-to", type=int, default=0, help="Pad volunteer rows to this count with editable blanks")
     parser.add_argument("--template", default=str(DEFAULT_TEMPLATE), help="Blank xlsx template to copy and fill")
     parser.add_argument("--create-template", help="Create or refresh a blank xlsx template asset at this path")
+    parser.add_argument("--strict-final", action="store_true", help="Fail if confirmed recommendations still have field-level official warnings")
+    parser.add_argument("--require-full", action="store_true", help="With --strict-final, fail unless target batches are filled to official capacity")
     args = parser.parse_args()
 
     if args.create_template:
-        count = args.pad_to if args.pad_to > 0 else 45
-        write_blank_template(Path(args.create_template), count)
+        write_blank_template(Path(args.create_template), args.pad_to)
         print(Path(args.create_template))
         return
 
@@ -334,10 +553,16 @@ def main() -> None:
 
     raw_rows = load_rows(Path(args.input))
     rows = [normalize(row, i + 1) for i, row in enumerate(raw_rows)]
-    rows = pad_rows(rows, args.pad_to)
+    required_batches = target_batches(rows)
 
-    output = Path(args.output) if args.output else ROOT / "output" / "2026广东高考志愿表草稿.md"
+    if not args.output:
+        raise SystemExit("--output is required; write final artifacts under output/{candidate}-{subject}-{rank}/")
+    output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
+    rows = final_rows(rows, args.pad_to, output)
+    warnings = strict_final_errors(rows, required_batches, args.require_full) if args.strict_final else validation_warnings(rows)
+    if args.strict_final and warnings:
+        raise SystemExit("严格最终表校验未通过：\n" + "\n".join(f"- {item}" for item in warnings))
     if output.suffix.lower() == ".xlsx":
         fill_template_xlsx(rows, Path(args.template), output)
     else:

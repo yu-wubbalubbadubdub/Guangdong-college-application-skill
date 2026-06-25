@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Look up Guangdong one-score-one-rank data and historical equivalent scores."""
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from xml.etree import ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
-SEGMENT_DIR = ROOT / "references/data/segments"
+SEGMENT_DIR = ROOT / "data/segments"
 NS = {
     "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
     "rel": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",

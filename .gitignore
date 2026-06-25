@@ -2,16 +2,18 @@
 output/
 profiles/
 test-runs/
+.cache/
 
-# Raw source bundles kept outside the published skill package
-000.先看这个(重要重要重要)/
-00、志愿填报必备资料/
-08、广东-2026志愿填报资料【永久更新】/
-Extra08-如何写出好的Skill.md
-
-# Duplicate root-level copy; the published asset lives under assets/
-/2026年广东省普通高校招生考生志愿表（官方）.pdf
-
-# Python cache
+# Python local state
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.log
